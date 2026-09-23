@@ -1,0 +1,8 @@
+{
+  "name": "FarmWork",
+  "short_name": "FarmWork",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f5f6f4",
+  "theme_color": "#1f5d42"
+}
