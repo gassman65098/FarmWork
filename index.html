@@ -1,1 +1,47 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#1f5d42"><link rel="manifest" href="manifest.webmanifest"><link rel="stylesheet" href="styles.css"><title>FarmWork</title></head><body><header><div><b>FarmWork</b><small id="subtitle">Work</small></div><div class="headBtns"><button id="historyBtn" class="headBtn">History</button><button id="add">＋</button></div></header><main><section id="homePage"><section class="card"><div class="month"><button id="prev">‹</button><h2 id="title"></h2><button id="next">›</button></div><div class="week">Sun Mon Tue Wed Thu Fri Sat</div><div id="cal" class="cal"></div></section><div id="sections"></div></section><section id="historyPage" class="hidden"><section class="card"><div class="row"><div><h2 style="margin:0">Completed Work</h2><div class="muted">Your completed work history</div></div><button class="secondary" onclick="showHome()">Back</button></div></section><div id="history"></div></section></main><div id="modal" class="hidden"><div class="box"><div class="mh"><h2 id="mt"></h2><button onclick="closeM()">×</button></div><div id="mb"></div></div></div><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f5d42">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="styles.css?v=5">
+<title>FarmWork</title>
+</head>
+<body>
+<header>
+  <div><b>FarmWork</b><small id="subtitle">Work</small></div>
+  <div class="headBtns">
+    <button id="historyBtn" class="headBtn">History</button>
+    <button id="add" class="addBtn">＋</button>
+  </div>
+</header>
+<main>
+  <section id="homePage">
+    <section class="card calendarCard">
+      <div class="month"><button id="prev" aria-label="Previous month">‹</button><h2 id="title"></h2><button id="next" aria-label="Next month">›</button></div>
+      <div class="week"><div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div></div>
+      <div id="cal" class="cal"></div>
+    </section>
+    <div class="quickAdd card">
+      <div><b>Add something to FarmWork</b><div class="muted">Add a tractor, piece of equipment, land, or work item.</div></div>
+      <button class="primary quickBtn" onclick="asset('tractor')">＋ Tractor</button>
+      <button class="primary quickBtn" onclick="asset('equipment')">＋ Equipment</button>
+      <button class="primary quickBtn" onclick="asset('land')">＋ Land</button>
+    </div>
+    <div id="sections"></div>
+  </section>
+
+  <section id="historyPage" class="hidden">
+    <section class="card historyHeader">
+      <div class="row"><div><h2 style="margin:0">Completed Work</h2><div class="muted">Your completed work history</div></div><button class="secondary backBtn" onclick="showHome()">Back</button></div>
+    </section>
+    <div id="history"></div>
+  </section>
+</main>
+
+<div id="modal" class="hidden"><div class="box"><div class="mh"><h2 id="mt"></h2><button onclick="closeM()">×</button></div><div id="mb"></div></div></div>
+<input id="restoreFile" type="file" accept="application/json" hidden>
+<script src="app.js?v=5"></script>
+</body>
+</html>
