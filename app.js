@@ -6,6 +6,7 @@ let S;
 try { S=JSON.parse(localStorage.getItem(KEY)||'null'); } catch(e) { S=null; }
 S = S && S.assets && S.work ? S : {version:5,assets:{tractor:[],equipment:[],land:[]},work:[]};
 S.assets.tractor ||= []; S.assets.equipment ||= []; S.assets.land ||= []; S.work ||= [];
+S.deletedWork ||= {}; S.deletedAssets ||= {tractor:{},equipment:{},land:{}};
 let V=new Date(); V.setDate(1);
 let currentUser=null;
 let cloudReady=false;
@@ -14,7 +15,7 @@ let realtimeChannel=null;
 let applyingRemote=false;
 const $=x=>document.querySelector(x);
 const setStatus=(text,ok=false)=>{const e=$('#syncStatus');if(e){e.textContent=text;e.classList.toggle('online',ok)}};
-const localSave=()=>{S.version=5;localStorage.setItem(KEY,JSON.stringify(S));render()};
+const localSave=()=>{S.version=7;localStorage.setItem(KEY,JSON.stringify(S));render()};
 const save=()=>{localSave(); queueCloudSave()};
 const day=d=>{const x=new Date(d);return new Date(x.getFullYear(),x.getMonth(),x.getDate()).toISOString().slice(0,10)};
 const fmt=x=>x?new Date(x+'T12:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'Whenever';
@@ -72,10 +73,10 @@ async function updateWork(id){let w=S.work.find(x=>x.id===id),d=$('#desc').value
 function asset(t,id=null){const a=id?S.assets[t].find(x=>x.id===id):null;modal((id?'Edit ':'Add ')+t,`<label>Name / description</label><input id="an" value="${esc(a?.name||'')}" placeholder="${t==='tractor'?'4020':t==='equipment'?'Planter':'80 acres north field'}"><div class="actions"><button class="secondary" onclick="closeM()">Cancel</button><button class="primary" onclick="${id?`saveAsset('${t}','${id}')`:`addAsset('${t}')`} ">Save</button></div>`)}
 function addAsset(t){const n=$('#an').value.trim();if(!n)return;S.assets[t].push({id:crypto.randomUUID(),name:n});save();closeM()}
 function saveAsset(t,id){const n=$('#an').value.trim();if(!n)return;S.assets[t].find(x=>x.id===id).name=n;save();closeM()}
-function deleteAsset(t,id){if(!confirm('Delete this item? Its linked work records will also be deleted.'))return;S.assets[t]=S.assets[t].filter(x=>x.id!==id);S.work=S.work.filter(w=>!(w.assetType===t&&w.assetId===id));save()}
+function deleteAsset(t,id){if(!confirm('Delete this item? Its linked work records will also be deleted.'))return;S.deletedAssets[t] ||= {}; S.deletedAssets[t][id]=new Date().toISOString(); S.assets[t]=S.assets[t].filter(x=>x.id!==id); S.work=S.work.filter(w=>!(w.assetType===t&&w.assetId===id)); S.work.forEach(w=>{if(w.assetType===t&&w.assetId===id) S.deletedWork[w.id]=new Date().toISOString()}); save()}
 function detail(id){const w=S.work.find(x=>x.id===id);if(!w)return;modal(w.description,`<p><b>Dates:</b> ${w.startWhenever?'Whenever':fmt(w.start)}${w.endWhenever?' – Whenever':(!w.startWhenever&&w.end&&w.end!==w.start?' – '+fmt(w.end):'')}</p>${w.time?`<p><b>Time:</b> ${w.time}</p>`:''}${w.notes?`<p><b>Notes:</b> ${esc(w.notes)}</p>`:''}${w.done?`<p><b>Completed:</b> ${fmt(w.completedDate)}${w.completedNotes?' — '+esc(w.completedNotes):''}</p>`:''}${w.photos?.length?'<div class="photos">'+w.photos.map(p=>`<img src="${p.data}" alt="Work photo">`).join('')+'</div>':''}<div class="actions">${!w.done?`<button class="primary" onclick="complete('${id}')">✓ Mark Complete</button>`:`<button class="secondary" onclick="undoComplete('${id}')">Undo completion</button>`}<button class="secondary" onclick="editWork('${id}')">Edit</button><button class="danger" onclick="deleteWork('${id}')">Delete</button></div>`)}
 function editWork(id){const w=S.work.find(x=>x.id===id);modal('Edit Work',`<label>Type</label><select id="type" onchange="fields('${id}')"><option value="calendar" ${!w.assetType?'selected':''}>Calendar</option><option value="tractor" ${w.assetType==='tractor'?'selected':''}>Tractor</option><option value="equipment" ${w.assetType==='equipment'?'selected':''}>Equipment</option><option value="land" ${w.assetType==='land'?'selected':''}>Land</option></select><div id="fields"></div>`);fields(id)}
-function deleteWork(id){if(!confirm('Delete this work item? This cannot be undone.'))return;S.work=S.work.filter(w=>w.id!==id);save();closeM()}
+function deleteWork(id){if(!confirm('Delete this work item? This cannot be undone.'))return;S.deletedWork ||= {}; S.deletedWork[id]=new Date().toISOString(); S.work=S.work.filter(w=>w.id!==id);save();closeM()}
 function complete(id){const w=S.work.find(x=>x.id===id);modal('Complete Work',`<label>When was it done?</label><input id="cd" type="date" value="${day(new Date())}"><label>Completion notes (optional)</label><textarea id="cn">${esc(w.completedNotes||'')}</textarea><label>Add completion photos (optional)</label><input id="cp" type="file" accept="image/*" multiple capture="environment"><div class="actions"><button class="secondary" onclick="closeM()">Cancel</button><button class="primary" onclick="finish('${id}')">Save Completion</button></div>`)}
 async function finish(id){const w=S.work.find(x=>x.id===id);w.done=true;w.completedDate=$('#cd').value;w.completedNotes=$('#cn').value;w.photos=[...(w.photos||[]),...(await imgs($('#cp').files))];save();closeM()}
 function undoComplete(id){const w=S.work.find(x=>x.id===id);w.done=false;w.completedDate=null;w.completedNotes='';save();closeM()}
@@ -117,34 +118,55 @@ async function signIn(){
 }
 async function signOutUser(){await stopRealtime();await supabaseClient.auth.signOut();currentUser=null;cloudReady=false;setStatus('Offline');closeAuth()}
 
+function normalizeState(x){
+  x=x&&x.assets&&x.work?x:{version:7,assets:{tractor:[],equipment:[],land:[]},work:[]};
+  x.assets.tractor ||= []; x.assets.equipment ||= []; x.assets.land ||= []; x.work ||= [];
+  x.deletedWork ||= {}; x.deletedAssets ||= {tractor:{},equipment:{},land:{}};
+  x.deletedAssets.tractor ||= {}; x.deletedAssets.equipment ||= {}; x.deletedAssets.land ||= {};
+  x.version=7;
+  for(const id of Object.keys(x.deletedWork)) x.work=x.work.filter(w=>w.id!==id);
+  for(const t of ['tractor','equipment','land']){
+    for(const id of Object.keys(x.deletedAssets[t])) x.assets[t]=x.assets[t].filter(a=>a.id!==id);
+    const gone=new Set(Object.keys(x.deletedAssets[t]));
+    x.work=x.work.filter(w=>!(w.assetType===t&&gone.has(w.assetId)));
+  }
+  return x;
+}
+function mergeStates(local,remote){
+  local=normalizeState(structuredClone(local)); remote=normalizeState(structuredClone(remote));
+  const out=normalizeState(structuredClone(remote));
+  out.deletedWork={...remote.deletedWork,...local.deletedWork};
+  out.deletedAssets={tractor:{...remote.deletedAssets.tractor,...local.deletedAssets.tractor},equipment:{...remote.deletedAssets.equipment,...local.deletedAssets.equipment},land:{...remote.deletedAssets.land,...local.deletedAssets.land}};
+  const work=new Map(); remote.work.forEach(w=>work.set(w.id,w)); local.work.forEach(w=>work.set(w.id,w));
+  out.work=[...work.values()];
+  for(const t of ['tractor','equipment','land']){const a=new Map();remote.assets[t].forEach(x=>a.set(x.id,x));local.assets[t].forEach(x=>a.set(x.id,x));out.assets[t]=[...a.values()];}
+  return normalizeState(out);
+}
+async function fetchCloud(){
+  const {data,error}=await supabaseClient.from('farmwork_data').select('data,updated_at').eq('user_id',currentUser.id).maybeSingle();
+  if(error) throw error; return data;
+}
 async function loadCloud(){
   if(!currentUser)return;
   setStatus('Syncing…');
-  const {data,error}=await supabaseClient.from('farmwork_data').select('data,updated_at').eq('user_id',currentUser.id).maybeSingle();
-  if(error){setStatus('Sync error');console.error(error);return;}
-  if(!data){
-    if(S.work.length||S.assets.tractor.length||S.assets.equipment.length||S.assets.land.length){
-      await pushCloud();
-    } else { await supabaseClient.from('farmwork_data').upsert({user_id:currentUser.id,data:S,updated_at:new Date().toISOString()}); }
-  } else if(data.data && (data.data.work||data.data.assets)){
-    const hasLocal=S.work.length||S.assets.tractor.length||S.assets.equipment.length||S.assets.land.length;
-    const hasCloud=data.data.work?.length||data.data.assets?.tractor?.length||data.data.assets?.equipment?.length||data.data.assets?.land?.length;
-    if(!hasCloud && hasLocal){
-      await pushCloud();
-    } else {
-      S=data.data;
-      S.version=5; S.assets ||= {tractor:[],equipment:[],land:[]}; S.assets.tractor ||= []; S.assets.equipment ||= []; S.assets.land ||= []; S.work ||= [];
-      localSave();
-    }
-  }
-  cloudReady=true; setStatus('Synced',true); await startRealtime();
+  try{
+    const row=await fetchCloud();
+    if(!row){ await pushCloud(); }
+    else { S=mergeStates(S,row.data); localSave(); await pushCloud(); }
+    cloudReady=true; setStatus('Synced',true); await startRealtime();
+  }catch(error){setStatus('Sync error');console.error(error);}
 }
 async function pushCloud(){
-  if(!currentUser||applyingRemote)return;
-  const payload={user_id:currentUser.id,data:S,updated_at:new Date().toISOString()};
-  const {error}=await supabaseClient.from('farmwork_data').upsert(payload,{onConflict:'user_id'});
-  if(error){console.error(error);setStatus('Sync error');return false}
-  setStatus('Saved to cloud',true);return true;
+  if(!currentUser||applyingRemote)return false;
+  try{
+    const row=await fetchCloud();
+    if(row?.data) S=mergeStates(S,row.data);
+    localSave();
+    const payload={user_id:currentUser.id,data:S,updated_at:new Date().toISOString()};
+    const {error}=await supabaseClient.from('farmwork_data').upsert(payload,{onConflict:'user_id'});
+    if(error) throw error;
+    setStatus('Saved to cloud',true); return true;
+  }catch(error){console.error(error);setStatus('Sync error');return false}
 }
 function queueCloudSave(){
   if(!currentUser||!cloudReady||applyingRemote)return;
@@ -156,7 +178,7 @@ async function startRealtime(){
   realtimeChannel=supabaseClient.channel('farmwork-'+currentUser.id).on('postgres_changes',{event:'UPDATE',schema:'public',table:'farmwork_data',filter:'user_id=eq.'+currentUser.id},payload=>{
     if(!payload.new?.data)return;
     applyingRemote=true;
-    S=payload.new.data; S.version=5; S.assets ||= {tractor:[],equipment:[],land:[]}; S.assets.tractor ||= []; S.assets.equipment ||= []; S.assets.land ||= []; S.work ||= [];
+    S=mergeStates(S,payload.new.data);
     localSave(); applyingRemote=false; setStatus('Synced',true);
   }).subscribe();
 }
@@ -178,4 +200,4 @@ supabaseClient.auth.onAuthStateChange(async (_event,session)=>{
 async function startCloud(){if(!currentUser)return;if(!navigator.onLine){setStatus('Offline');return}await loadCloud()}
 
 render();
-if('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js?v=6').catch(()=>{});
+if('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js?v=7').catch(()=>{});
